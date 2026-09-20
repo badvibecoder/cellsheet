@@ -1,0 +1,16 @@
+# Build output. bin/ holds a .gitkeep so the directory survives a clone.
+/bin/*
+!/bin/.gitkeep
+
+# Workbooks and the files the program writes beside them.
+*.cell
+*.cell.bak
+*.cell.lock
+
+# Go build scratch, when built inside the tree rather than in bin/
+/cellsheet
+/look
+
+# Editor and OS noise
+.DS_Store
+*.swp
