@@ -132,9 +132,31 @@ func (m *Model) drawTopBar(c *render.Canvas) {
 	if n := inner - render.StringWidth(left) - render.StringWidth(right); n > 0 {
 		mid = strings.Repeat("─", n)
 	}
+	// Remember where each menu name landed; drawMenu highlights the open one in
+	// place rather than re-emitting the bar at offsets of its own.
+	m.recordMenuTitles(left)
 	c.Draw(1, 0, left+mid+right, m.Th.MenuTitle)
 	c.Set(0, 0, '┌', m.Th.Frame)
 	c.Set(w-1, 0, '┐', m.Th.Frame)
+}
+
+// recordMenuTitles finds each menu name inside the menu bar that was drawn, so
+// that an open menu's title can be highlighted exactly where it already is. A
+// name that did not fit at this width is simply not highlightable.
+func (m *Model) recordMenuTitles(left string) {
+	for i, label := range menuLabels {
+		if i >= menuCount {
+			break
+		}
+		if idx := strings.Index(left, label); idx >= 0 {
+			// strings.Index counts bytes and the bar is drawn in columns, so
+			// the offset has to be measured in display width — the rule
+			// characters are three bytes each.
+			m.menuTitleX[i], m.menuTitleOK[i] = 1+render.StringWidth(left[:idx]), true
+		} else {
+			m.menuTitleOK[i] = false
+		}
+	}
 }
 
 func (m *Model) drawFormulaBar(c *render.Canvas, geo layout.Geometry) {

@@ -156,9 +156,10 @@ func Lex(src string) ([]Token, error) {
 			out = append(out, Token{Kind: Currency, Text: text, Pos: i})
 			i += n
 		case c == '$':
-			// An absolute reference such as $A$1. The '$' is accepted and
-			// ignored for now; absolute addressing arrives with copy/paste
-			// translation (PHASE-1-SPEC.md §18.2).
+			// An absolute reference such as $A$1. The '$' is kept in the token
+			// text so copy/paste translation can see which parts are pinned;
+			// evaluation itself treats the reference as the cell it names,
+			// because there is only one place a formula can be.
 			text, n := scanIdent(s[i:])
 			out = append(out, Token{Kind: Ident, Text: text, Pos: i})
 			i += n

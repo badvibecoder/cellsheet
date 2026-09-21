@@ -65,20 +65,20 @@ func menuFor(which int) (string, []menuItem) {
 	}
 }
 
-// menuLabels are the words on the menu bar.
+// menuLabels are the words on the menu bar. menuCount is their number; it is a
+// constant so the arrays that record where they were drawn can be sized.
 var menuLabels = []string{"File", "Edit", "Rollback", "View"}
 
+const menuCount = 4
+
 func (m *Model) drawMenu(c *render.Canvas) {
-	// Highlight the open menu's title on the bar.
-	x := 1
-	for i, label := range menuLabels {
-		st := m.Th.MenuTitle
-		if i == m.MenuWhich {
-			st = m.Th.PanelSel
-		}
-		text := "─ " + label
-		c.Draw(x, 0, text, st)
-		x += render.StringWidth(text)
+	// Highlight the open menu's own name where the top bar actually drew it.
+	// Redrawing the whole bar here was the bug: the names were re-emitted at
+	// offsets that did not match the bar's spacing, so "View" landed on top of
+	// "Rollback (Alt+R)" and left the old text sticking out after it.
+	if m.MenuWhich >= 0 && m.MenuWhich < menuCount && m.menuTitleOK[m.MenuWhich] {
+		label := menuLabels[m.MenuWhich]
+		c.Draw(m.menuTitleX[m.MenuWhich], 0, label, m.Th.PanelSel)
 	}
 
 	_, items := menuFor(m.MenuWhich)
@@ -99,14 +99,6 @@ func (m *Model) drawMenu(c *render.Canvas) {
 	p := render.NewCanvas(boxW, boxH)
 	p.DrawBox(0, 0, boxW, boxH, m.Th.PanelBorder)
 
-	sel := 0
-	for i, it := range items {
-		if !it.sep {
-			sel = i
-			break
-		}
-	}
-	_ = sel
 	row := 0
 	for _, it := range items {
 		row++
@@ -184,17 +176,25 @@ func (m *Model) runMenuItem(which, idx int) {
 		case "New":
 			m.NewRequested = true
 		case "Open…":
-			m.OpenRequested = true
+			// The prompt has to be opened here; raising OpenRequested with no
+			// path is a request the application cannot act on, which is why
+			// the menu item used to do nothing.
+			m.openPathPrompt(PromptOpen, "Open")
 		case "Save":
-			m.SaveRequested = true
+			m.requestSave()
 		case "Save As…":
-			m.SaveRequested = true
-			m.SaveAs = true
+			m.openTextPrompt(PromptSaveAs, "Save as", m.Path)
 		case "Exit":
 			m.Quit = true
 		}
 	case 1: // Edit
 		switch item.label {
+		case "Copy":
+			m.copySelection(false)
+		case "Cut":
+			m.copySelection(true)
+		case "Paste":
+			m.pasteClipboard()
 		case "Insert row above":
 			m.insertRow()
 		case "Insert column left":
@@ -220,7 +220,7 @@ func (m *Model) runMenuItem(which, idx int) {
 		if item.label == "Show checkpoint history" {
 			m.openRollback()
 		} else {
-			m.SetStatus(false, "Checkpoints arrive with the file format")
+			m.manualCheckpoint()
 		}
 	case 3: // View
 		if item.label == "Recalculate" {
@@ -424,17 +424,24 @@ func (m *Model) handlePathPrompt(msg tea.KeyMsg) tea.Cmd {
 			m.PathBuf = m.PathBuf[:len(m.PathBuf)-1]
 		}
 	case "enter":
-		path := trimSpace(m.PathBuf)
-		if path == "" {
+		value := trimSpace(m.PathBuf)
+		if value == "" {
 			m.SetStatus(true, "Enter a file name")
 			return nil
-		}
-		if !strings.HasSuffix(strings.ToLower(path), ".cell") {
-			path += ".cell"
 		}
 		kind := m.Prompt
 		m.Mode = ModeReady
 		m.PathBuf = ""
+		if kind == PromptSheetName {
+			// The name typed is the value just read; reading it back out of the
+			// buffer after clearing it renamed every sheet to "".
+			m.renameSheet(value)
+			return nil
+		}
+		path := value
+		if !strings.HasSuffix(strings.ToLower(path), ".cell") {
+			path += ".cell"
+		}
 		switch kind {
 		case PromptSaveAs:
 			m.PendingPath = path
@@ -443,8 +450,6 @@ func (m *Model) handlePathPrompt(msg tea.KeyMsg) tea.Cmd {
 		case PromptOpen:
 			m.PendingPath = path
 			m.OpenRequested = true
-		case PromptSheetName:
-			m.renameSheet(trimSpace(m.PathBuf))
 		}
 	default:
 		m.PathBuf += printableString(msg)

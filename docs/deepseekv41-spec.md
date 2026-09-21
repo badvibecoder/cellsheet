@@ -1709,8 +1709,6 @@ per-edit undo and redo.
 
 **Known and deliberate limitations**, all as designed in Phase 1:
 
-- Pasting a formula copies it verbatim; relative references are not translated.
-  That belongs with absolute addressing, which is out of scope (§18.2).
 - Cross-sheet references are lexed and preserved but evaluate to `#REF!` until
   the dependency graph is workbook-scoped (§18).
 - No CSV import or export (D15), no system clipboard, no mouse, no config file
@@ -1980,8 +1978,6 @@ exactly where the defect was.
 
 Deliberate, all recorded earlier in this document:
 
-- Pasting a formula copies it verbatim; relative references are not translated.
-  That belongs with absolute addressing (§18.2).
 - Cross-sheet references are lexed, preserved and reported as `#REF!` until the
   dependency graph is workspace-scoped (§18).
 - No CSV import or export (D15).

@@ -99,6 +99,12 @@ type Model struct {
 	MenuIdx   int
 	MenuWhich int // 0 = File, 1 = Edit, 2 = Rollback, 3 = View
 
+	// menuTitleX and menuTitleOK remember where each menu name was drawn on the
+	// top bar, so opening a menu can highlight its name in place instead of
+	// redrawing the bar at guessed offsets.
+	menuTitleX  [menuCount]int
+	menuTitleOK [menuCount]bool
+
 	// Rollback
 	RbIdx   int
 	RbTyped string
@@ -271,11 +277,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		m.Quit = true
 		return tea.Quit
 	case "ctrl+s":
-		if m.Path == "" {
-			m.openPathPrompt(PromptSaveAs, "Save as")
-			return nil
-		}
-		m.SaveRequested = true
+		m.requestSave()
+		return nil
+	case "ctrl+shift+s":
+		m.openTextPrompt(PromptSaveAs, "Save as", m.Path)
 		return nil
 	case "ctrl+n":
 		m.NewRequested = true
@@ -299,9 +304,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		m.redo()
 		return nil
 	case "ctrl+b":
-		if m.OnEdit != nil {
-			m.OnEdit(journal.KindManual, "Manual checkpoint")
-		}
+		m.manualCheckpoint()
+		return nil
+	case "ctrl+a":
+		m.selectAll()
 		return nil
 	case "ctrl+t":
 		m.addSheet()
@@ -463,7 +469,7 @@ func (m *Model) handleEditKey(msg tea.KeyMsg) tea.Cmd {
 	// possible moment for saving to stop responding.
 	case "ctrl+s":
 		m.commitEdit()
-		m.SaveRequested = true
+		m.requestSave()
 		return nil
 	case "ctrl+q":
 		m.commitEdit()
@@ -471,9 +477,7 @@ func (m *Model) handleEditKey(msg tea.KeyMsg) tea.Cmd {
 		return tea.Quit
 	case "ctrl+b":
 		m.commitEdit()
-		if m.OnEdit != nil {
-			m.OnEdit(journal.KindManual, "Manual checkpoint")
-		}
+		m.manualCheckpoint()
 		return nil
 	case "esc":
 		m.Mode = ModeReady
@@ -521,10 +525,34 @@ func (m *Model) askConfirm(msg string, fn func(bool)) {
 // beginEdit starts editing the active cell, seeded with seed. If seed is
 // non-empty the existing content is replaced, which is what happens when you
 // simply start typing.
+//
+// Editing one cell collapses any block selection: leaving the neighbours
+// highlighted while a single cell is being edited is misleading, and the
+// selection no longer describes what the next keystroke will change.
 func (m *Model) beginEdit(seed string) {
 	m.Mode = ModeEdit
 	m.EditRef = m.Cur
 	m.EditBuf = seed
+	m.HasSel = false
+}
+
+// manualCheckpoint records a checkpoint the user asked for, whether from the
+// keyboard or from the Rollback menu.
+func (m *Model) manualCheckpoint() {
+	if m.OnEdit != nil {
+		m.OnEdit(journal.KindManual, "Manual checkpoint")
+	}
+}
+
+// requestSave saves to the current file, or asks for one when the workbook has
+// never been saved. Ctrl+S and the File menu both go through here so the two
+// cannot disagree about what saving means.
+func (m *Model) requestSave() {
+	if m.Path == "" {
+		m.openPathPrompt(PromptSaveAs, "Save as")
+		return
+	}
+	m.SaveRequested = true
 }
 
 func (m *Model) commitEdit() {
@@ -1255,6 +1283,15 @@ func (m *Model) pasteBuffer(b *clipboard.Buffer) {
 
 	ctx := context.Background()
 	pasted, skipped := 0, 0
+
+	// A copied formula follows the block: "=SUM(A1:B1)" pasted one column right
+	// becomes "=SUM(B1:C1)". A cut moves the formulas unchanged, and text pasted
+	// from another application is taken literally, so only an internal copy is
+	// translated.
+	dRow := int(origin.Row) - int(b.Origin().Row)
+	dCol := int(origin.Col) - int(b.Origin().Col)
+	translate := !b.FromText() && !b.IsCut() && (dRow != 0 || dCol != 0)
+
 	for r := 0; r < b.H; r++ {
 		for c := 0; c < b.W; c++ {
 			ref := grid.Ref{Row: origin.Row + uint32(r), Col: origin.Col + uint32(c)}
@@ -1263,7 +1300,11 @@ func (m *Model) pasteBuffer(b *clipboard.Buffer) {
 				continue
 			}
 			sh.GrowToFit(ref.Row, ref.Col)
-			m.Eng.PutQuiet(sh, ref, b.At(r, c))
+			cl := b.At(r, c)
+			if translate && cl.IsFormula() {
+				cl.Source = clipboard.TranslateFormula(cl.Source, dRow, dCol)
+			}
+			m.Eng.PutQuiet(sh, ref, cl)
 			pasted++
 		}
 	}
@@ -1280,13 +1321,14 @@ func (m *Model) pasteBuffer(b *clipboard.Buffer) {
 	m.Eng.RebuildGraph()
 	m.Eng.RecalcWorkbook(ctx)
 
-	// Select what was pasted, so the result is visible and can be acted on.
+	// The cursor returns to the top-left corner of what was pasted. It used to
+	// land on the bottom-right, so the next paste started from there and every
+	// repeat walked further down and to the right. The selection is collapsed
+	// for the same reason: one cell is active, and the next action applies to
+	// it rather than to the whole block.
 	m.Anchor = origin
-	m.Cur = grid.Ref{
-		Row: min(origin.Row+uint32(b.H)-1, uint32(grid.MaxRows-1)),
-		Col: min(origin.Col+uint32(b.W)-1, uint32(grid.MaxCols-1)),
-	}
-	m.HasSel = b.W > 1 || b.H > 1
+	m.Cur = origin
+	m.HasSel = false
 
 	kind := journal.KindCellEdited
 	if pasted > 1 {

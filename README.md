@@ -107,6 +107,10 @@ header, reached with `←` at column A.
 A formula that stops in the middle of a call is closed for you: `=SUM(A1:A4` and
 `Enter` gives `=SUM(A1:A4)`.
 
+Copying a formula moves its relative references the way the destination needs:
+`=SUM(B1:B5)` copied to column C becomes `=SUM(C1:C5)`. A `$` pins the part it
+marks, so `=$B$1` never moves. Cutting a formula leaves its references alone.
+
 ### Cell types
 
 `numbers` · `$currency` · `text`. Currency is always shown as `$50,000.00`, and

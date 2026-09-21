@@ -140,6 +140,10 @@ func keyMsg(s string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyCtrlRight}
 	case "ctrl+s":
 		return tea.KeyMsg{Type: tea.KeyCtrlS}
+	case "ctrl+a":
+		return tea.KeyMsg{Type: tea.KeyCtrlA}
+	case "ctrl+b":
+		return tea.KeyMsg{Type: tea.KeyCtrlB}
 	case "ctrl+q":
 		return tea.KeyMsg{Type: tea.KeyCtrlQ}
 	case "ctrl+n":
@@ -150,6 +154,10 @@ func keyMsg(s string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}, Alt: true}
 	case "alt+f":
 		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}, Alt: true}
+	case "alt+e":
+		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}, Alt: true}
+	case "alt+v":
+		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}, Alt: true}
 	case "alt+r":
 		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}, Alt: true}
 	case "y":
@@ -660,16 +668,35 @@ func TestPasteIsOneUndoStep(t *testing.T) {
 	}
 }
 
-func TestPasteMarksTheBlockSelected(t *testing.T) {
+// TestPasteLeavesTheCursorAtTheTopLeft is the fix for the reported paste
+// behaviour: the cursor used to land on the bottom-right of the block, so
+// pressing Ctrl+V again started from there and every repeat walked further down
+// and to the right.
+func TestPasteLeavesTheCursorAtTheTopLeft(t *testing.T) {
 	m := newModel(t)
-	m.Cur = grid.Ref{Row: 8, Col: 0}
+	origin := grid.Ref{Row: 8, Col: 0}
+	m.Cur = origin
 	m.pasteText("1\t2\n3\t4")
-	r0, c0, r1, c1, ok := m.Selection()
-	if !ok {
-		t.Fatal("a pasted block should be selected")
+	if m.Cur != origin {
+		t.Fatalf("after pasting a 2x2 block the cursor is %v, want the top-left %v", m.Cur, origin)
 	}
-	if r0 != 8 || c0 != 0 || r1 != 9 || c1 != 1 {
-		t.Errorf("selection is %d,%d..%d,%d", r0, c0, r1, c1)
+	if _, _, _, _, ok := m.Selection(); ok {
+		t.Error("the neighbours of the pasted cell should not stay highlighted")
+	}
+
+	// A second paste must land on exactly the same cells rather than drifting:
+	// it overwrites the block in place.
+	m.pasteText("5\t6\n7\t8")
+	want := [2][2]string{{"5", "6"}, {"7", "8"}}
+	for r := 0; r < 2; r++ {
+		for c := 0; c < 2; c++ {
+			if got := m.Sheet().Get(8+uint32(r), uint32(c)).Value.Display(); got != want[r][c] {
+				t.Errorf("cell (%d,%d) = %q, want %q; the second paste drifted", 8+r, c, got, want[r][c])
+			}
+		}
+	}
+	if m.Cur != origin {
+		t.Errorf("after the second paste the cursor is %v, want %v", m.Cur, origin)
 	}
 }
 
