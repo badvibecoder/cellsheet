@@ -16,9 +16,9 @@ import (
 	"github.com/badvibecoder/cellsheet/internal/app"
 )
 
-// version is stamped at build time by the Makefile with
-// -ldflags "-X main.version=...". A plain "go build" reports "dev".
-var version = "dev"
+// version is the release version, and can be stamped at build time by the
+// Makefile with -ldflags "-X main.version=...".
+var version = "0.1.0"
 
 func main() {
 	color := flag.String("color", "auto", "colour: auto, none, 16, 256 or true")

@@ -1160,7 +1160,7 @@ small static binary promise. The custom container is ~400 lines of stdlib.
 {
   "formatVersion": 1,
   "minReaderVersion": 1,
-  "appVersion": "0.2.0",
+  "appVersion": "0.1.0",
   "created":  "2026-03-04T21:47:12-05:00",
   "modified": "2026-03-04T22:14:02-05:00",
   "activeSheet": 0,

@@ -21,8 +21,8 @@ import (
 	"github.com/badvibecoder/cellsheet/internal/tui/theme"
 )
 
-// Version is reported in the manifest and by -version.
-const Version = "0.2.0-dev"
+// Version is the application version recorded in every workbook's manifest.
+const Version = "0.1.0"
 
 // Options configures a run.
 type Options struct {
